@@ -1,7 +1,7 @@
 
 # Selenium Bot (Daraz Products Scrapper)
 
-This is a Selenium Bot that scraps Daraz laptop categories products using Selenium automation, this bot also stores errors, warnings, critical errors and some info in log file that will help you to identify the problem if occur, and you can also schedule it that help you to scrap updated content.
+This is a Selenium Bot that scraps Daraz laptop categories products using Selenium automation, this bot also stores errors, warnings, critical errors, and some info in the log file that will help you to identify the problem if it occurs, and you can also schedule it that allow you to scrap updated content.
 
 
 
@@ -21,10 +21,10 @@ python -m venv env_name
     source env_name/bin/activate
     ```
 * After creating a virtual environment, clone my GitHub repository into the folder in which you created the virtual environment.
-* The repository contain **chromedriver.exe** for **windows**, make sure that you save that file at that location where you saved project file. If you have other OS and version of chrome browser, then install **chromedriver** from this page [page](https://chromedriver.chromium.org/downloads).
+* The repository contains **chromedriver.exe** for **Windows**, make sure that you save that file at the location where you saved the project file. If you have another OS and version of the Chrome browser, then install **chromedriver** from this page [page](https://chromedriver.chromium.org/downloads).
 
-* This project run, if you have **Chrome browser**, to run it for other browsers you have to install a web driver for your browser and change driver path in code.
-* You should have also a MySQL database management system in your system, and create a database using the following query:
+* This project run, if you have **Chrome browser**, to run it for other browsers you have to install a web driver for your browser and change the driver path in the code.
+* You should also have a MySQL database management system in your system, and create a database using the following query:
 ```
 CREATE DATABASE database_name
 ```
