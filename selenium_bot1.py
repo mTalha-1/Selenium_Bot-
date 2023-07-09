@@ -1,49 +1,50 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException
+
 import mysql.connector
-import schedule
-import time as tm
 from time import sleep
 import logging
 
+# Logging Configaration
 logging.basicConfig(filename='bot_file.txt', filemode='w',level=logging.INFO, format= '%(asctime)s - %(levelname)s - %(message)s - %(lineno)d')
 
-
-logging.info('Getting MySQL database connection requirements.\n')
-print("\nGive following information to build MySQL connection.")
-Host = input("Enter your host.\n")
-User = input("Enter your MySQL username.\n")
-Password = input("Enter your MySQL password.\n")
-Database =  input("Enter your MySQL database name.\n")
-
 # Building Database connection
-try:
-    conn = mysql.connector.connect(
-            host=Host,
-            user= User,     
-            password= Password, 
-            database= Database  
-        )
-except Exception as e:
-    logging.critical(e)
-else:
-    cursor = conn.cursor()
+def connection_database(host,user,password,database):
+    try:
+        logging.info('Building Database Connection')
+        conn = mysql.connector.connect(
+                host= host,
+                user= user,     
+                password= password, 
+                database= database 
+            )
+    except Exception as e:
+        logging.critical(e)
+    else:
+        return conn
 
 # Function for creating Table, if table exist first delete it and then creat.
-def Table_creation():
-
+def Table_creation(connection):
+    conn = connection
+    cursor = conn.cursor()
     table_name = "Laptop_Products"
 
+# MySQL query that give result if table exist
     table_exists_query = """
     SELECT COUNT(*)
     FROM information_schema.tables
     WHERE table_schema = '{database}'
         AND table_name = '{table}'
-    """.format(database= Database, table=table_name)
+    """.format(database= 'daraz_laptops_products', table=table_name)
 
     cursor.execute(table_exists_query)
     table_exists = cursor.fetchone()[0]
 
+# Checking Table exist or not
     if table_exists:
         # Table exists, so delete it
         delete_table_query = "DROP TABLE {table}".format(table=table_name)
@@ -52,6 +53,7 @@ def Table_creation():
     else:
         logging.info("Table does not exist.")
 
+# MySQL query for creating table
     create_table_query = """
     CREATE TABLE {table} (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -71,30 +73,48 @@ def Table_creation():
     else:
         logging.info("Table created successfully.")
 
+def webdriver_connection():
+    try:
+        service =   Service(executable_path = "/chromedriver")
+        driver = webdriver.Chrome(service=service)
+    except Exception as e:
+        logging.critical(e)
+    else:
+        driver.maximize_window()
+        return driver
 
+def open_page(page,driver):
+    website = "https://www.daraz.pk/laptops/?page="+str(page)+"&style=list"
+    try:
+        driver.set_page_load_timeout(100)
+        driver.implicitly_wait(50)
+        driver.get(website)
+    except Exception as e:
+        logging.error(e)
+
+def find_element_extract_text(driver,el_xpath):
+    try:
+        description = WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((By.XPATH,el_xpath))
+        )
+    except NoSuchElementException as e:
+        logging.error(e)
+        return ''
+    else:
+        return description.text
+    
 # Scraping Daraz Laptop category Products
-def Scraping(start_page,page_increment,max_retrieves,chromedriver_path):
+def Scraping(start_page,page_increment,max_retrieves,connection):
 
     count = 1
     page = start_page
     pageincrement = page_increment
     maxretrieves = max_retrieves
 
-    website = "https://www.daraz.pk/laptops/?page="+str(page) +"&spm=a2a0e.home.cate_7.5.5a494076JWE33V&style=list"
-    path = chromedriver_path
+#   Connecting with Chrome browser and opening daraz laptops category page
 
-    try:
-        service =   Service(executable_path =path)
-        driver = webdriver.Chrome(service=service)
-    except Exception as e:
-        logging.critical(e)
-    else:
-        driver.maximize_window()
-        try:
-            driver.get(website)
-            driver.set_page_load_timeout(20)
-        except Exception as e:
-            logging.error(e)
+    driver = webdriver_connection()
+    open_page(page,driver)
 
     print("Scraping page ",page)
     while True:
@@ -105,86 +125,52 @@ def Scraping(start_page,page_increment,max_retrieves,chromedriver_path):
             if count>pageincrement:
                 count = 1
                 page +=1
-                
-                print("Scraping page ",page)
-                website = "https://www.daraz.pk/laptops/?page="+str(page) +"&spm=a2a0e.home.cate_7.5.5a494076JWE33V&style=list"
-                try:
-                    driver.get(website)
-                    driver.set_page_load_timeout(20)
-                except Exception as e:
-                    logging.error(e)
 
+                print("Scraping page ",page)
+                open_page(page,driver)
+
+            # Scraping products titles
             try:
+                driver.implicitly_wait(20)
                 xpathTitle = '//*[@id="root"]/div/div[2]/div[1]/div/div[1]/div[2]/div['+str(count)+']/div/div[2]/div[2]/a'
                 title = driver.find_element(by='xpath',value=xpathTitle)
-            except Exception as e:
+            except NoSuchElementException as e:
                 logging.error(e)
                 title_text = ''
             else:
                 title_text = title.text
-            finally:
                 title.click()
-                driver.implicitly_wait(10)
 
-            try:
-                xpathdescription = '//*[@id="module_product_detail"]/div/div[1]/div[1]/ul'
-                description = driver.find_element(by='xpath',value=xpathdescription)
-            except Exception as e:
-                logging.error(e)
-                description_text = ''
-            else:
-                description_text = description.text
-            finally:
-                driver.implicitly_wait(10)
+            # Scraping products discription
+            xpathdescription = '//*[@id="module_product_detail"]/div/div[1]/div[1]/ul'
+            description = find_element_extract_text(driver,xpathdescription)
 
-            try:
-                xpathprice = '//*[@id="module_product_price_1"]/div/div/span'
-                price = driver.find_element(by='xpath',value=xpathprice)
-            except Exception as e:
-                logging.error(e)
-                price_text = ''
-            else:
-                price_text = price.text
-            finally:
-                driver.execute_script("window.scrollBy(0,2000)","")
-                driver.implicitly_wait(4)
+            # Scraping products price
+            xpathprice = '//*[@id="module_product_price_1"]/div/div/span'
+            price = find_element_extract_text(driver,xpathprice)
 
-            try:
-                xpathRating = '//*[@id="module_product_review"]/div/div/div[1]/div[2]/div/div/div[1]/div[1]'
-                Rating = driver.find_element(by='xpath',value=xpathRating)
-            except Exception as e:
-                logging.error(e)
-                Rating_text = ''
-            else:
-                Rating_text = Rating.text.split('/')[0]
-            finally:
-                driver.implicitly_wait(4)
+            driver.execute_script("window.scrollBy(0,2000)","")
 
-            try:
-                xpathTotal_reviews = '//*[@id="module_product_review"]/div/div/div[1]/div[2]/div/div/div[1]/div[3]'
-                Total_reviews = driver.find_element(by='xpath',value=xpathTotal_reviews)
-            except Exception as e:
-                logging.error(e)
-                Total_reviews_text = ''
-            else:
-                Total_reviews_text = Total_reviews.text.split('R')[0]
-            finally:
-                driver.implicitly_wait(4)
+            # Scraping products Rating
+            xpathRating = '//*[@id="module_product_review"]/div/div/div[1]/div[2]/div/div/div[1]/div[1]'
+            Rating =find_element_extract_text(driver,xpathRating).split('/')[0]
+            
+            # Scraping products Reviews
+            xpathTotal_reviews = '//*[@id="module_product_review"]/div/div/div[1]/div[2]/div/div/div[1]/div[3]'
+            Total_reviews =  find_element_extract_text(driver,xpathTotal_reviews).split('R')[0]
 
-            website = "https://www.daraz.pk/laptops/?page="+str(page) +"&spm=a2a0e.home.cate_7.5.5a494076JWE33V&style=list"
-            try:
-                driver.get(website)
-                driver.set_page_load_timeout(20)
-            except Exception as e:
-                logging.error(e)
-
-
+            # Inserting Data to Database
+            conn = connection
+            cursor = conn.cursor()
             insert_query = f"INSERT INTO Laptop_Products (Product_title, Product_price, No_of_Reviews, Product_Rating, Product_description) VALUES (%s,%s,%s,%s,%s)"
-            data = (title_text, price_text, int(Total_reviews_text), float(Rating_text), description_text)
+            data = (title_text, price, int(Total_reviews), float(Rating), description)
             cursor.execute(insert_query,data)
             conn.commit()
 
+            open_page(page,driver)
+                
             count+=1
+
         except Exception as e:
             logging.error(e)
             count+=1
@@ -195,25 +181,30 @@ def Scraping(start_page,page_increment,max_retrieves,chromedriver_path):
                 count = 1
                 page +=1
             
-            website = "https://www.daraz.pk/laptops/?page="+str(page) +"&spm=a2a0e.home.cate_7.5.5a494076JWE33V&style=list"
-            try:
-                driver.get(website)
-                driver.set_page_load_timeout(10)
-            except Exception as e:
-                logging.error(e)
+            open_page(page,driver)
 
-    driver.close()
+    # driver.close()
+    # driver.quit()
+    
 
 
+if __name__ == '__main__':
 
-Chromedriver_path = "C:/Users/dell/Desktop/selenium_bot/chromedriver_win32/chromedriver"
+# Getting MySQL database connection requirements
 
-Table_creation()
+    print("\nGive following information to build MySQL connection.")
+    Host = input("Enter your host.\n")
+    User = input("Enter your MySQL username.\n")
+    Password = input("Enter your MySQL password.\n")
+    Database =  input("Enter your MySQL database name.\n")
 
-print("\nEnter basic Scraping details: ")
+    conn = connection_database(Host,User,Password,Database)
+    Table_creation(conn)
 
-startpage = int(input("Enter the page number from which you want to start scraping.\n"))
-pageincrement = int(input("Enter how many products you want to scrap per page.\n(Note: the number should be <= to total number of products per page)\n"))
-maxretrieve = int(input("Enter max number of products you want to scrap.\n"))
+    print("\nEnter basic Scraping details: \n")
 
-Scraping(startpage,pageincrement,maxretrieve,Chromedriver_path)
+    startpage = int(input("Enter the page number from which you want to start scraping.\n"))
+    pageincrement = int(input("Enter how many products you want to scrap per page.\n(Note: the number should be <= to total number of products per page)\n"))
+    maxretrieve = int(input("Enter how many max number of products you want to scrap.\n"))
+
+    Scraping(1,pageincrement,maxretrieve,conn)
